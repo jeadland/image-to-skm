@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """SKP Converter — GUI app to convert images to SketchUp SKM materials."""
 
+import json
+import subprocess
 import sys
 import threading
 import tkinter as tk
@@ -51,13 +53,32 @@ PRESETS = [
 ]
 
 
+PREFS_PATH = Path.home() / ".skp_converter_prefs.json"
+
+
+def _load_prefs() -> dict:
+    try:
+        return json.loads(PREFS_PATH.read_text())
+    except Exception:
+        return {}
+
+
+def _save_prefs(prefs: dict) -> None:
+    try:
+        PREFS_PATH.write_text(json.dumps(prefs, indent=2))
+    except Exception:
+        pass
+
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Image to SKM Converter for SketchUp")
         self.resizable(False, False)
         self._preview_photo = None  # keep reference to prevent GC
+        self._last_output_dir = None  # track for Reveal in Finder
         self._build_ui()
+        self._load_saved_prefs()
         self._center()
         self.after(100, self._activate)
         self.protocol("WM_DELETE_WINDOW", self._on_quit)
@@ -261,9 +282,48 @@ class App(tk.Tk):
         self.log.tag_config("ok",  foreground="#1a7f37")
         self.log.tag_config("err", foreground="#cf222e")
 
+        status_row = ttk.Frame(outer)
+        status_row.pack(fill="x", pady=(8, 0))
         self.status_var = tk.StringVar(value="Add images to get started.")
-        ttk.Label(outer, textvariable=self.status_var,
-                  foreground="gray").pack(anchor="w", pady=(8, 0))
+        ttk.Label(status_row, textvariable=self.status_var,
+                  foreground="gray").pack(side="left")
+        self.reveal_btn = ttk.Button(status_row, text="Reveal in Finder",
+                                     command=self._reveal_in_finder)
+        # Hidden until first successful conversion
+        self.reveal_btn.pack_forget()
+
+    # ------------------------------------------------------------------
+    # Preferences (persist between launches)
+    # ------------------------------------------------------------------
+
+    def _load_saved_prefs(self):
+        """Restore saved settings from previous session."""
+        prefs = _load_prefs()
+        if "unit" in prefs:
+            old_unit = self.unit_var.get()
+            new_unit = prefs["unit"]
+            if new_unit in UNITS_TO_INCHES and new_unit != old_unit:
+                self.unit_var.set(new_unit)
+                self._prev_unit = new_unit
+        if "width" in prefs:
+            self.width_var.set(str(prefs["width"]))
+        if "height" in prefs:
+            self.height_var.set(str(prefs["height"]))
+        if "output_mode" in prefs:
+            self.output_mode.set(prefs["output_mode"])
+            self._on_output_mode()
+        if "output_path" in prefs:
+            self.output_path_var.set(prefs["output_path"])
+
+    def _save_current_prefs(self):
+        """Save current settings for next launch."""
+        _save_prefs({
+            "unit": self.unit_var.get(),
+            "width": self.width_var.get(),
+            "height": self.height_var.get(),
+            "output_mode": self.output_mode.get(),
+            "output_path": self.output_path_var.get(),
+        })
 
     # ------------------------------------------------------------------
     # Interactions
@@ -461,11 +521,16 @@ class App(tk.Tk):
         mat_name = self.material_name_var.get().strip() or None
 
         self.convert_btn.config(state="disabled")
+        self.reveal_btn.pack_forget()
         self._log_clear()
         self.status_var.set("Converting…")
 
+        # Save prefs on each conversion
+        self._save_current_prefs()
+
         def run():
             ok = err = 0
+            last_dir = None
             multi = len(files) > 1
             for idx, path_str in enumerate(files, start=1):
                 src = Path(path_str)
@@ -480,6 +545,7 @@ class App(tk.Tk):
                     file_name = None
                 try:
                     out_dir = self._resolve_output(src)
+                    last_dir = str(out_dir)
                     skm = img_to_skm.convert(
                         str(src), x_scale=w_in, y_scale=h_in,
                         output_dir=str(out_dir),
@@ -491,6 +557,7 @@ class App(tk.Tk):
                     self._log(f"✗  {src.name}: {e}\n", "err")
                     err += 1
 
+            self._last_output_dir = last_dir
             summary = f"Done — {ok} converted"
             if err:
                 summary += f", {err} failed"
@@ -501,6 +568,14 @@ class App(tk.Tk):
     def _finish(self, summary):
         self.convert_btn.config(state="normal")
         self.status_var.set(summary)
+        # Show Reveal in Finder if we have an output directory
+        if self._last_output_dir and Path(self._last_output_dir).exists():
+            self.reveal_btn.pack(side="right")
+
+    def _reveal_in_finder(self):
+        """Open the output folder in Finder."""
+        if self._last_output_dir and Path(self._last_output_dir).exists():
+            subprocess.Popen(["open", str(self._last_output_dir)])
 
     def _log(self, msg, tag=""):
         self.after(0, lambda: self._log_write(msg, tag))
@@ -518,7 +593,8 @@ class App(tk.Tk):
 
 
     def _on_quit(self):
-        """Ensure the process fully terminates so macOS can relaunch."""
+        """Save preferences and ensure the process fully terminates."""
+        self._save_current_prefs()
         self.destroy()
         import os
         os._exit(0)

@@ -1,0 +1,5 @@
+Pillow>=9.0
+
+# Optional — only needed to build the macOS GUI app:
+# py2app
+# pyobjc-framework-Cocoa

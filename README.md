@@ -2,6 +2,10 @@
 
 Convert JPG, PNG, BMP, GIF, TIFF, and WebP images to SketchUp's `.skm` material format. No SketchUp license required.
 
+<!-- To add a screenshot: take a screenshot of the app, save as screenshot.png in the repo root, and uncomment:
+![SKP Converter screenshot](screenshot.png)
+-->
+
 ## What is an SKM file?
 
 SketchUp uses `.skm` files to store materials (textures + metadata). An `.skm` file is a ZIP archive containing:
@@ -82,6 +86,9 @@ The app provides a complete interface for converting images to SKM:
    - Presets include common sizes: 1m×1m, 5ft×8ft, 8ft×10ft, etc.
 5. **Preview** — shows the selected image scaled to your chosen tile proportions
 6. Click **Convert**
+7. **Reveal in Finder** — after conversion, click to open the output folder directly
+
+Settings (unit, dimensions, output folder) are **remembered between sessions**.
 
 ### Command line
 
