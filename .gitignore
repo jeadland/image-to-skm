@@ -1,0 +1,19 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Build artifacts
+build/
+dist/
+*.app/
+
+# Claude
+.claude/
+
+# Environment
+.env
+.venv/
