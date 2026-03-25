@@ -130,10 +130,12 @@ _REFERENCES_XML = (
 
 def convert(image_path: str, scale: float = 39.37,
             x_scale: float | None = None, y_scale: float | None = None,
-            output_dir: str | None = None) -> str:
+            output_dir: str | None = None,
+            material_name: str | None = None) -> str:
     """Convert a single image to SKM. Returns the output .skm path.
 
     x_scale / y_scale override scale when provided (inches per tile axis).
+    material_name overrides the material name and output filename (default: image stem).
     """
     src = Path(image_path).resolve()
     if not src.exists():
@@ -146,12 +148,12 @@ def convert(image_path: str, scale: float = 39.37,
     r, g, b = _average_color(img)
     avg = _packed_bgr(r, g, b)
 
-    name = src.stem
+    name = material_name.strip() if material_name and material_name.strip() else src.stem
     filename = src.name
     internal = _internal_name(filename)
 
     out_dir = Path(output_dir) if output_dir else src.parent
-    skm_path = out_dir / src.with_suffix(".skm").name
+    skm_path = out_dir / f"{name}.skm"
 
     with zipfile.ZipFile(skm_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("document.xml",

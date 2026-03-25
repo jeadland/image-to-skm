@@ -1,10 +1,10 @@
 # image-to-skm — Convert Images to SketchUp Material (.skm) Files
 
-Convert JPG, PNG, and other image files to SketchUp's `.skm` material format. No SketchUp license required.
+Convert JPG, PNG, BMP, GIF, TIFF, and WebP images to SketchUp's `.skm` material format. No SketchUp license required.
 
 ## What is an SKM file?
 
-SketchUp uses `.skm` files to store materials (textures + metadata). They are ZIP archives containing:
+SketchUp uses `.skm` files to store materials (textures + metadata). An `.skm` file is a ZIP archive containing:
 
 ```
 material.skm
@@ -23,13 +23,24 @@ The XML format uses SketchUp's `http://sketchup.google.com/schemas/sketchup/1.0/
 - **Texture scale** (`xScale`, `yScale`) — real-world tile size in **inches** (independent width/height)
 - **Texture reference** — the image stored under `ref/` with an `_1` id suffix
 
-This format was reverse-engineered from real `.skm` files shipped with SketchUp 2026. It is compatible with SketchUp 2017 and later.
+This format was reverse-engineered from real `.skm` files shipped with SketchUp 2026. It is compatible with **SketchUp 2017 and later**.
 
 ## Why does this exist?
 
 SketchUp doesn't provide a way to batch-create materials from image files. If you have texture images (wood grain, tile, fabric, etc.), the only official way to make them into `.skm` files is to open SketchUp, create a material manually, apply the texture, and save it. For one image that's fine — for dozens it's tedious.
 
 This tool automates it: give it images, get `.skm` files you can import directly into SketchUp's Materials panel.
+
+## Supported input formats
+
+| Format | Extensions |
+|--------|-----------|
+| JPEG | `.jpg`, `.jpeg` |
+| PNG | `.png` |
+| BMP | `.bmp` |
+| TIFF | `.tif`, `.tiff` |
+| WebP | `.webp` |
+| GIF | `.gif` |
 
 ## Installation
 
@@ -42,15 +53,35 @@ This tool automates it: give it images, get `.skm` files you can import directly
 pip install Pillow
 ```
 
-### Optional (macOS GUI app)
+### macOS GUI app (optional)
 
-To build the native macOS drag-and-drop app:
+To build the native macOS app with image preview and batch conversion:
 
 ```bash
 pip install py2app pyobjc-framework-Cocoa
+python build_app.py
 ```
 
+This creates `SKP Converter.app` on your Desktop — double-click to launch.
+
 ## Usage
+
+### macOS GUI app
+
+The app provides a complete interface for converting images to SKM:
+
+1. **Add images** — click "Add Files…" to select one or more images
+2. **Set material name** — optionally enter a custom name
+   - Leave blank to use each image's original filename
+   - With multiple images, a custom name produces `Name-1.skm`, `Name-2.skm`, etc.
+   - With a single image, the name is used as-is: `Name.skm`
+3. **Choose output folder** — same folder as source, or pick a custom destination
+4. **Set tile size** — pick a preset or enter custom width × height
+   - **Units dropdown**: choose between inches (`in`), centimetres (`cm`), feet (`ft`), or metres (`m`)
+   - Switching units auto-converts the displayed values
+   - Presets include common sizes: 1m×1m, 5ft×8ft, 8ft×10ft, etc.
+5. **Preview** — shows the selected image scaled to your chosen tile proportions
+6. Click **Convert**
 
 ### Command line
 
@@ -68,37 +99,22 @@ python img_to_skm.py *.jpg --scale 24
 # → each .skm at 24" × 24" (2 ft square)
 ```
 
-The `--scale` flag sets both width and height in inches. For independent width/height, use the Python API or GUI app.
+The `--scale` flag sets both width and height in **inches**. For independent width/height, use the Python API or GUI app.
 
 ### Python API
 
 ```python
 import img_to_skm
 
-# Square tile (1 metre)
+# Square tile (1 metre = 39.37 inches)
 img_to_skm.convert("brick.jpg", scale=39.37)
 
 # Rectangular — 5 ft wide × 8 ft tall (e.g., a rug)
 img_to_skm.convert("rug.jpg", x_scale=60, y_scale=96)
 
-# Custom output directory
-img_to_skm.convert("tile.png", scale=12, output_dir="/path/to/materials")
+# Custom output directory and material name
+img_to_skm.convert("tile.png", scale=12, output_dir="/path/to/materials", material_name="My Tile")
 ```
-
-### macOS GUI app
-
-Build and launch the native app:
-
-```bash
-python setup.py py2app
-open dist/SKP\ Converter.app
-```
-
-The app provides:
-- File picker for source images
-- Output folder selection (same as source or custom)
-- Preset sizes (1m×1m, 5ft×8ft, etc.) or custom width × height in inches
-- Batch conversion with progress log
 
 ## Importing into SketchUp
 
@@ -109,6 +125,18 @@ The app provides:
 5. The materials appear in the panel, ready to paint onto faces
 
 Alternatively, use **File → Import** and select a `.skm` file directly.
+
+## Common scale values
+
+| Real-world size | Inches | Centimetres | Use case |
+|----------------|--------|-------------|----------|
+| 0.5 m × 0.5 m | 19.69 × 19.69 | 50 × 50 | Small tiles |
+| 1 m × 1 m | 39.37 × 39.37 | 100 × 100 | Standard tiles, wood planks |
+| 2 m × 2 m | 78.74 × 78.74 | 200 × 200 | Large wall panels |
+| 1 ft × 1 ft | 12 × 12 | 30.48 × 30.48 | Floor tiles |
+| 2 ft × 3 ft | 24 × 36 | 60.96 × 91.44 | Small rugs |
+| 5 ft × 8 ft | 60 × 96 | 152.4 × 243.8 | Area rugs |
+| 8 ft × 10 ft | 96 × 120 | 243.8 × 304.8 | Large area rugs |
 
 ## File format reference
 
@@ -173,21 +201,21 @@ Texture images are stored inside the ZIP under `ref/`. The filename gets an `_<i
 
 SketchUp 2025+ supports PBR materials with additional texture maps (roughness, normal, ambient occlusion). These use `workflow="1"` and add a `<mat:pbrMR>` element. This tool generates `workflow="0"` (basic) materials which are compatible with all SketchUp versions from 2017 onward.
 
-## Common scale values
-
-| Real-world size | Inches | Use case |
-|----------------|--------|----------|
-| 0.5 m × 0.5 m | 19.69 | Small tiles |
-| 1 m × 1 m | 39.37 | Standard tiles, wood planks |
-| 2 m × 2 m | 78.74 | Large wall panels |
-| 1 ft × 1 ft | 12.0 | Floor tiles |
-| 2 ft × 3 ft | 24 × 36 | Small rugs |
-| 5 ft × 8 ft | 60 × 96 | Area rugs |
-| 8 ft × 10 ft | 96 × 120 | Large area rugs |
-
 ## How it was built
 
 The `.skm` format is not publicly documented by Trimble. This tool was built by reverse-engineering real `.skm` files from SketchUp 2026's shipped materials library. The XML structure, namespace URIs, and attribute semantics were determined by inspecting files like `Tile Mosaic Multi.skm` and `Plywood_01_1K.skm`.
+
+## Project structure
+
+```
+image-to-skm/
+├── img_to_skm.py      ← core converter (CLI + Python API)
+├── converter_app.py    ← macOS GUI app (tkinter)
+├── build_app.py        ← builds SKP Converter.app using py2app
+├── setup.py            ← py2app configuration
+├── README.md
+└── LICENSE             ← MIT
+```
 
 ## License
 
