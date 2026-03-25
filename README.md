@@ -118,11 +118,19 @@ img_to_skm.convert("tile.png", scale=12, output_dir="/path/to/materials", materi
 
 ## Importing into SketchUp
 
-1. Open SketchUp
-2. Open the **Materials** panel (Window → Materials on Mac, or Default Tray on Windows)
-3. Click the **Details** menu (gear icon) → **Add Collection to Favorites…**
-4. Select the folder containing your `.skm` files
-5. The materials appear in the panel, ready to paint onto faces
+### SketchUp for Web (free online version)
+
+1. Open the **Materials** panel by clicking the materials icon in the right sidebar
+2. Click the **Upload** button (arrow pointing up)
+3. In the "Choose Material" popup, click **My device** or drag and drop your `.skm` file
+4. The material is added and ready to paint onto faces
+
+### SketchUp Desktop (Pro / Studio)
+
+1. Open the **Materials** panel (Window → Materials on Mac, or Default Tray on Windows)
+2. Click the **Details** menu (gear icon) → **Add Collection to Favorites…**
+3. Select the folder containing your `.skm` files
+4. The materials appear in the panel, ready to paint onto faces
 
 Alternatively, use **File → Import** and select a `.skm` file directly.
 
