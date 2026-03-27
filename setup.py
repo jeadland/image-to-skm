@@ -8,8 +8,8 @@ setup(
     options={
         "py2app": {
             "argv_emulation": False,
-            "includes": ["img_to_skm", "PIL"],
-            "packages": ["PIL"],
+            "includes": ["img_to_skm", "PIL", "customtkinter"],
+            "packages": ["PIL", "customtkinter"],
             "plist": {
                 "CFBundleName": "SKP Converter",
                 "CFBundleDisplayName": "SKP Converter",

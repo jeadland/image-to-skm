@@ -6,7 +6,7 @@ import subprocess
 import sys
 import threading
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox
 from pathlib import Path
 
 HERE = Path(__file__).parent.resolve()
@@ -25,6 +25,15 @@ except ImportError:
     messagebox.showerror(
         "Missing dependency",
         "Pillow is not installed.\n\nRun in Terminal:\n  pip3 install Pillow"
+    )
+    sys.exit(1)
+
+try:
+    import customtkinter as ctk
+except ImportError:
+    messagebox.showerror(
+        "Missing dependency",
+        "customtkinter is not installed.\n\nRun in Terminal:\n  pip3 install customtkinter"
     )
     sys.exit(1)
 
@@ -70,13 +79,40 @@ def _save_prefs(prefs: dict) -> None:
         pass
 
 
-class App(tk.Tk):
+# ── Colours ──────────────────────────────────────────────────────────
+BG          = "#f9fafb"
+CARD        = "#ffffff"
+ACCENT      = "#2563eb"
+ACCENT_HOVER = "#1d4ed8"
+ACCENT_LIGHT = "#eff6ff"
+SEC_BTN     = "#e5e7eb"    # secondary button bg
+SEC_HOVER   = "#d1d5db"    # secondary button hover
+TEXT        = "#111827"
+TEXT_SEC    = "#374151"
+TEXT_DIM    = "#6b7280"
+GREEN       = "#059669"
+RED         = "#dc2626"
+BORDER      = "#e5e7eb"
+ENTRY_BG    = "#ffffff"
+ENTRY_BORDER = "#d1d5db"
+PREVIEW_BG  = "#f3f4f6"
+
+
+ctk.set_appearance_mode("light")
+ctk.set_default_color_theme("blue")
+
+
+class App(ctk.CTk):
     def __init__(self):
         super().__init__()
+
         self.title("Image to SKM Converter for SketchUp")
-        self.resizable(False, False)
-        self._preview_photo = None  # keep reference to prevent GC
-        self._last_output_dir = None  # track for Reveal in Finder
+        self.geometry("680x880")
+        self.resizable(True, True)
+        self.minsize(600, 700)
+        self.configure(fg_color=BG)
+        self._preview_photo = None
+        self._last_output_dir = None
         self._build_ui()
         self._load_saved_prefs()
         self._center()
@@ -90,16 +126,12 @@ class App(tk.Tk):
         self.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
 
     def _activate(self):
-        """Bring the window to the front on macOS."""
-        # PyObjC: register as foreground app so macOS shows the dock icon
-        # and allows window focus
         try:
-            from AppKit import NSApplication, NSApp  # type: ignore[import]
+            from AppKit import NSApplication, NSApp
             NSApplication.sharedApplication()
             NSApp.activateIgnoringOtherApps_(True)
         except ImportError:
             pass
-        # Tk: force the window to the top, then relax
         self.attributes("-topmost", True)
         self.lift()
         self.focus_force()
@@ -110,199 +142,257 @@ class App(tk.Tk):
     # ------------------------------------------------------------------
 
     def _build_ui(self):
-        P = 16  # padding
-        PREVIEW_SIZE = 200
+        PREVIEW_SIZE = 180
 
-        # Configure ttk style — stay native/light, just tune spacing
-        style = ttk.Style(self)
-        style.theme_use("aqua")  # native macOS look
+        outer = ctk.CTkFrame(self, fg_color=BG, corner_radius=0)
+        outer.pack(fill="both", expand=True, padx=24, pady=(16, 20))
 
-        outer = ttk.Frame(self, padding=P)
-        outer.pack(fill="both", expand=True)
-
-        # ── App heading + supported formats ────────────────────────
-        ttk.Label(outer, text="Image to SKM Converter for SketchUp",
-                  font=("SF Pro Text", 15, "bold")).pack(anchor="w")
+        # ── Heading ──────────────────────────────────────────────────
+        ctk.CTkLabel(outer, text="Image to SKM Converter for SketchUp",
+                     font=("SF Pro Display", 18, "bold"),
+                     text_color=TEXT).pack(anchor="w")
         formats = ", ".join(sorted(ext.lstrip(".").upper() for ext in IMAGE_EXTENSIONS))
-        ttk.Label(outer, text=f"Supported formats: {formats}",
-                  font=("SF Pro Text", 11), foreground="gray").pack(anchor="w", pady=(2, 10))
+        ctk.CTkLabel(outer, text=f"Supported formats: {formats}",
+                     font=("SF Pro Text", 11),
+                     text_color=TEXT_DIM).pack(anchor="w", pady=(2, 12))
 
-        # ── Top area: left controls + right preview ────────────────
-        top = ttk.Frame(outer)
+        # ── Top: source list + preview ───────────────────────────────
+        top = ctk.CTkFrame(outer, fg_color="transparent")
         top.pack(fill="x")
 
-        left = ttk.Frame(top)
+        left = ctk.CTkFrame(top, fg_color="transparent")
         left.pack(side="left", fill="both", expand=True)
 
-        # ── Preview panel (right side) ─────────────────────────────
-        preview_frame = ttk.LabelFrame(top, text="Preview", padding=4)
-        preview_frame.pack(side="right", padx=(16, 0), anchor="n")
+        # Preview (right)
+        preview_card = ctk.CTkFrame(top, fg_color=CARD, corner_radius=10,
+                                    border_width=1, border_color=BORDER)
+        preview_card.pack(side="right", padx=(14, 0), anchor="n")
+
+        ctk.CTkLabel(preview_card, text="Preview",
+                     font=("SF Pro Text", 10), text_color=TEXT_DIM).pack(pady=(6, 3))
 
         self.preview_canvas = tk.Canvas(
-            preview_frame, width=PREVIEW_SIZE, height=PREVIEW_SIZE,
-            bg="#f0f0f0", highlightthickness=1, highlightbackground="#c0c0c0"
+            preview_card, width=PREVIEW_SIZE, height=PREVIEW_SIZE,
+            bg=PREVIEW_BG, highlightthickness=0, borderwidth=0
         )
-        self.preview_canvas.pack()
+        self.preview_canvas.pack(padx=8)
         self.preview_canvas.create_text(
             PREVIEW_SIZE // 2, PREVIEW_SIZE // 2,
             text="Select an image\nto preview",
-            fill="#999", font=("SF Pro Text", 11), justify="center",
+            fill=TEXT_DIM, font=("SF Pro Text", 10), justify="center",
             tags="placeholder"
         )
 
-        preview_info = ttk.Frame(preview_frame)
-        preview_info.pack(fill="x", pady=(4, 0))
         self.preview_dims_var = tk.StringVar(value="")
-        ttk.Label(preview_info, textvariable=self.preview_dims_var,
-                  font=("SF Mono", 10), foreground="gray").pack()
+        ctk.CTkLabel(preview_card, textvariable=self.preview_dims_var,
+                     font=("SF Mono", 9), text_color=TEXT_DIM).pack(pady=(2, 8))
 
-        # ── Source files (in left column) ──────────────────────────
-        ttk.Label(left, text="Source Images", font=("SF Pro Text", 12, "bold")).pack(anchor="w")
+        # Source images
+        ctk.CTkLabel(left, text="Source Images",
+                     font=("SF Pro Text", 12, "bold"),
+                     text_color=TEXT).pack(anchor="w")
 
-        list_frame = ttk.Frame(left)
-        list_frame.pack(fill="x", pady=(4, 0))
+        list_card = ctk.CTkFrame(left, fg_color=CARD, corner_radius=8,
+                                 border_width=1, border_color=BORDER)
+        list_card.pack(fill="x", pady=(4, 0))
 
-        sb = ttk.Scrollbar(list_frame, orient="vertical")
         self.file_list = tk.Listbox(
-            list_frame, height=5, selectmode="extended",
+            list_card, height=4, selectmode="extended",
             font=("SF Mono", 11),
-            yscrollcommand=sb.set,
-            relief="solid", borderwidth=1
+            bg=CARD, fg=TEXT, selectbackground=ACCENT_LIGHT,
+            selectforeground=TEXT,
+            relief="flat", borderwidth=0, highlightthickness=0
         )
-        sb.config(command=self.file_list.yview)
-        self.file_list.pack(side="left", fill="x", expand=True)
-        sb.pack(side="right", fill="y")
+        sb = ctk.CTkScrollbar(list_card, command=self.file_list.yview, height=0)
+        self.file_list.configure(yscrollcommand=sb.set)
+        self.file_list.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=4)
+        sb.pack(side="right", fill="y", padx=(0, 2), pady=4)
         self.file_list.bind("<<ListboxSelect>>", self._on_file_select)
 
-        btn_row = ttk.Frame(left)
+        btn_row = ctk.CTkFrame(left, fg_color="transparent")
         btn_row.pack(fill="x", pady=(6, 0))
-        ttk.Button(btn_row, text="Add Files…",       command=self._add_files).pack(side="left")
-        ttk.Button(btn_row, text="Remove Selected",  command=self._remove_selected).pack(side="left", padx=(6, 0))
-        ttk.Button(btn_row, text="Clear All",        command=self._clear_files).pack(side="left", padx=(6, 0))
+        self._ghost_btn(btn_row, "+ Add Files…", self._add_files).pack(side="left")
+        self._ghost_btn(btn_row, "Remove", self._remove_selected).pack(side="left", padx=(4, 0))
+        self._ghost_btn(btn_row, "Clear All", self._clear_files).pack(side="left", padx=(4, 0))
 
-        # ── Output Name ────────────────────────────────────────────
-        ttk.Separator(left, orient="horizontal").pack(fill="x", pady=12)
-        ttk.Label(left, text="Material Name", font=("SF Pro Text", 12, "bold")).pack(anchor="w")
+        # ── Material Name ────────────────────────────────────────────
+        self._sep(left)
+        ctk.CTkLabel(left, text="Material Name",
+                     font=("SF Pro Text", 12, "bold"),
+                     text_color=TEXT).pack(anchor="w")
 
-        name_row = ttk.Frame(left)
+        name_row = ctk.CTkFrame(left, fg_color="transparent")
         name_row.pack(fill="x", pady=(4, 0))
         self.material_name_var = tk.StringVar()
-        self.material_name_entry = ttk.Entry(name_row, textvariable=self.material_name_var, width=30)
-        self.material_name_entry.pack(side="left", fill="x", expand=True)
-        ttk.Label(name_row, text=".skm", foreground="gray").pack(side="left", padx=(2, 0))
-        ttk.Label(left, text="Leave blank to use each image's filename. With multiple\nimages, a custom name produces Name-1.skm, Name-2.skm, etc.",
-                  foreground="gray", font=("SF Pro Text", 10), justify="left").pack(anchor="w", pady=(2, 0))
+        ctk.CTkEntry(name_row, textvariable=self.material_name_var,
+                     width=240, height=30, corner_radius=6,
+                     fg_color=CARD, border_color=ENTRY_BORDER,
+                     text_color=TEXT, font=("SF Mono", 12)).pack(side="left")
+        ctk.CTkLabel(name_row, text=".skm", font=("SF Mono", 12),
+                     text_color=TEXT_DIM).pack(side="left", padx=(4, 0))
 
-        ttk.Separator(outer, orient="horizontal").pack(fill="x", pady=12)
+        ctk.CTkLabel(left,
+                     text="Leave blank to use filename. Multiple images: Name-1, Name-2, etc.",
+                     font=("SF Pro Text", 10), text_color=TEXT_DIM,
+                     justify="left").pack(anchor="w", pady=(2, 0))
 
-        # ── Output Folder ──────────────────────────────────────────
-        ttk.Label(outer, text="Output Folder", font=("SF Pro Text", 12, "bold")).pack(anchor="w")
+        # ── Output Folder ────────────────────────────────────────────
+        self._sep(outer)
+        ctk.CTkLabel(outer, text="Output Folder",
+                     font=("SF Pro Text", 12, "bold"),
+                     text_color=TEXT).pack(anchor="w")
 
         self.output_mode = tk.StringVar(value="same")
 
-        ttk.Radiobutton(outer, text="Same folder as source image",
-                        variable=self.output_mode, value="same",
-                        command=self._on_output_mode).pack(anchor="w", pady=(4, 0))
+        ctk.CTkRadioButton(outer, text="Same folder as source image",
+                           variable=self.output_mode, value="same",
+                           command=self._on_output_mode,
+                           font=("SF Pro Text", 12), text_color=TEXT_SEC,
+                           fg_color=ACCENT, hover_color=ACCENT_HOVER,
+                           border_color=ENTRY_BORDER).pack(anchor="w", pady=(4, 0))
 
-        custom_row = ttk.Frame(outer)
-        custom_row.pack(fill="x", pady=(4, 0))
-        ttk.Radiobutton(custom_row, text="Custom folder:",
-                        variable=self.output_mode, value="custom",
-                        command=self._on_output_mode).pack(side="left")
+        custom_row = ctk.CTkFrame(outer, fg_color="transparent")
+        custom_row.pack(fill="x", pady=(3, 0))
+        ctk.CTkRadioButton(custom_row, text="Custom:",
+                           variable=self.output_mode, value="custom",
+                           command=self._on_output_mode,
+                           font=("SF Pro Text", 12), text_color=TEXT_SEC,
+                           fg_color=ACCENT, hover_color=ACCENT_HOVER,
+                           border_color=ENTRY_BORDER).pack(side="left")
 
         self.output_path_var = tk.StringVar()
-        self.output_entry = ttk.Entry(custom_row, textvariable=self.output_path_var,
-                                      width=30, state="disabled")
-        self.output_entry.pack(side="left", padx=(6, 6))
-        self.browse_btn = ttk.Button(custom_row, text="Browse…",
-                                     command=self._browse_output, state="disabled")
+        self.output_entry = ctk.CTkEntry(custom_row, textvariable=self.output_path_var,
+                                         width=200, height=28, corner_radius=6,
+                                         fg_color=CARD, border_color=ENTRY_BORDER,
+                                         text_color=TEXT, state="disabled")
+        self.output_entry.pack(side="left", padx=(6, 4))
+        self.browse_btn = self._ghost_btn(custom_row, "Browse…", self._browse_output)
         self.browse_btn.pack(side="left")
+        self.browse_btn.configure(state="disabled")
 
-        ttk.Separator(outer, orient="horizontal").pack(fill="x", pady=12)
+        # ── Texture Tile Size ────────────────────────────────────────
+        self._sep(outer)
+        ctk.CTkLabel(outer, text="Texture Tile Size",
+                     font=("SF Pro Text", 12, "bold"),
+                     text_color=TEXT).pack(anchor="w")
 
-        # ── Options ──────────────────────────────────────────────────
-        ttk.Label(outer, text="Texture Tile Size", font=("SF Pro Text", 12, "bold")).pack(anchor="w")
-
-        preset_row = ttk.Frame(outer)
-        preset_row.pack(fill="x", pady=(6, 0))
-        ttk.Label(preset_row, text="Preset:").pack(side="left")
+        preset_row = ctk.CTkFrame(outer, fg_color="transparent")
+        preset_row.pack(fill="x", pady=(4, 0))
+        ctk.CTkLabel(preset_row, text="Preset", font=("SF Pro Text", 11),
+                     text_color=TEXT_SEC).pack(side="left")
         self.preset_var = tk.StringVar(value=PRESETS[1][0])
-        preset_cb = ttk.Combobox(preset_row, textvariable=self.preset_var,
-                                  values=[p[0] for p in PRESETS],
-                                  state="readonly", width=18)
-        preset_cb.pack(side="left", padx=(6, 0))
-        preset_cb.bind("<<ComboboxSelected>>", self._on_preset)
+        ctk.CTkOptionMenu(preset_row, variable=self.preset_var,
+                          values=[p[0] for p in PRESETS],
+                          command=self._on_preset,
+                          width=160, height=28, corner_radius=6,
+                          fg_color=CARD, button_color=SEC_BTN,
+                          button_hover_color=SEC_HOVER,
+                          dropdown_fg_color=CARD, dropdown_text_color=TEXT,
+                          font=("SF Pro Text", 11),
+                          text_color=TEXT).pack(side="left", padx=(6, 0))
 
-        dim_row = ttk.Frame(outer)
-        dim_row.pack(fill="x", pady=(8, 0))
+        dim_row = ctk.CTkFrame(outer, fg_color="transparent")
+        dim_row.pack(fill="x", pady=(6, 0))
 
-        ttk.Label(dim_row, text="Width:").pack(side="left")
+        ctk.CTkLabel(dim_row, text="W", font=("SF Pro Text", 11),
+                     text_color=TEXT_SEC).pack(side="left")
         self.width_var = tk.StringVar(value="100")
-        ttk.Entry(dim_row, textvariable=self.width_var, width=8).pack(side="left", padx=(4, 2))
+        ctk.CTkEntry(dim_row, textvariable=self.width_var,
+                     width=65, height=28, corner_radius=6,
+                     fg_color=CARD, border_color=ENTRY_BORDER,
+                     text_color=TEXT, font=("SF Mono", 11)).pack(side="left", padx=(4, 0))
 
-        ttk.Label(dim_row, text="   Height:").pack(side="left")
+        ctk.CTkLabel(dim_row, text="×", font=("SF Pro Text", 13),
+                     text_color=TEXT_DIM).pack(side="left", padx=(8, 8))
+
+        ctk.CTkLabel(dim_row, text="H", font=("SF Pro Text", 11),
+                     text_color=TEXT_SEC).pack(side="left")
         self.height_var = tk.StringVar(value="100")
-        ttk.Entry(dim_row, textvariable=self.height_var, width=8).pack(side="left", padx=(4, 2))
+        ctk.CTkEntry(dim_row, textvariable=self.height_var,
+                     width=65, height=28, corner_radius=6,
+                     fg_color=CARD, border_color=ENTRY_BORDER,
+                     text_color=TEXT, font=("SF Mono", 11)).pack(side="left", padx=(4, 0))
 
-        ttk.Label(dim_row, text="   Units:").pack(side="left")
         self.unit_var = tk.StringVar(value="cm")
-        unit_cb = ttk.Combobox(dim_row, textvariable=self.unit_var,
-                               values=list(UNITS_TO_INCHES.keys()),
-                               state="readonly", width=4)
-        unit_cb.pack(side="left", padx=(4, 0))
-        unit_cb.bind("<<ComboboxSelected>>", self._on_unit_change)
+        ctk.CTkOptionMenu(dim_row, variable=self.unit_var,
+                          values=list(UNITS_TO_INCHES.keys()),
+                          command=self._on_unit_change,
+                          width=60, height=28, corner_radius=6,
+                          fg_color=CARD, button_color=SEC_BTN,
+                          button_hover_color=SEC_HOVER,
+                          dropdown_fg_color=CARD, dropdown_text_color=TEXT,
+                          font=("SF Mono", 11),
+                          text_color=TEXT).pack(side="left", padx=(12, 0))
         self._prev_unit = "cm"
 
-        # Update preview when dimensions change
         self.width_var.trace_add("write", self._on_dim_change)
         self.height_var.trace_add("write", self._on_dim_change)
 
-        ttk.Separator(outer, orient="horizontal").pack(fill="x", pady=12)
-
         # ── Convert ──────────────────────────────────────────────────
-        self.convert_btn = ttk.Button(outer, text="Convert", command=self._convert)
-        self.convert_btn.pack()
-
-        ttk.Separator(outer, orient="horizontal").pack(fill="x", pady=12)
+        self.convert_btn = ctk.CTkButton(
+            outer, text="Convert", command=self._convert,
+            width=0, height=38, corner_radius=8,
+            fg_color=ACCENT, hover_color=ACCENT_HOVER,
+            font=("SF Pro Text", 13, "bold"), text_color="white"
+        )
+        self.convert_btn.pack(fill="x", pady=(16, 0))
 
         # ── Results ──────────────────────────────────────────────────
-        ttk.Label(outer, text="Results", font=("SF Pro Text", 12, "bold")).pack(anchor="w")
+        self._sep(outer)
+        ctk.CTkLabel(outer, text="Results",
+                     font=("SF Pro Text", 12, "bold"),
+                     text_color=TEXT).pack(anchor="w")
 
-        log_frame = ttk.Frame(outer)
-        log_frame.pack(fill="x", pady=(4, 0))
-        log_sb = ttk.Scrollbar(log_frame, orient="vertical")
-        self.log = tk.Text(log_frame, height=5, state="disabled",
+        log_card = ctk.CTkFrame(outer, fg_color=CARD, corner_radius=8,
+                                border_width=1, border_color=BORDER)
+        log_card.pack(fill="both", expand=True, pady=(4, 0))
+
+        self.log = tk.Text(log_card, height=3, state="disabled",
                            font=("SF Mono", 11), wrap="none",
-                           relief="solid", borderwidth=1,
-                           yscrollcommand=log_sb.set)
-        log_sb.config(command=self.log.yview)
-        self.log.pack(side="left", fill="x", expand=True)
-        log_sb.pack(side="right", fill="y")
+                           bg=CARD, fg=TEXT,
+                           insertbackground=TEXT,
+                           relief="flat", borderwidth=0, highlightthickness=0)
+        log_sb = ctk.CTkScrollbar(log_card, command=self.log.yview, height=0)
+        self.log.configure(yscrollcommand=log_sb.set)
+        self.log.pack(side="left", fill="both", expand=True, padx=(6, 0), pady=4)
+        log_sb.pack(side="right", fill="y", padx=(0, 2), pady=4)
 
-        self.log.tag_config("ok",  foreground="#1a7f37")
-        self.log.tag_config("err", foreground="#cf222e")
+        self.log.tag_config("ok",  foreground=GREEN)
+        self.log.tag_config("err", foreground=RED)
 
-        status_row = ttk.Frame(outer)
-        status_row.pack(fill="x", pady=(8, 0))
+        # ── Status ───────────────────────────────────────────────────
+        status_row = ctk.CTkFrame(outer, fg_color="transparent")
+        status_row.pack(fill="x", pady=(6, 0))
         self.status_var = tk.StringVar(value="Add images to get started.")
-        ttk.Label(status_row, textvariable=self.status_var,
-                  foreground="gray").pack(side="left")
-        self.reveal_btn = ttk.Button(status_row, text="Reveal in Finder",
-                                     command=self._reveal_in_finder)
-        # Hidden until first successful conversion
+        ctk.CTkLabel(status_row, textvariable=self.status_var,
+                     font=("SF Pro Text", 11), text_color=TEXT_DIM).pack(side="left")
+        self.reveal_btn = self._ghost_btn(status_row, "Reveal in Finder",
+                                          self._reveal_in_finder)
         self.reveal_btn.pack_forget()
 
+    # ── UI helpers ───────────────────────────────────────────────────
+
+    def _sep(self, parent):
+        ctk.CTkFrame(parent, fg_color=BORDER, height=1,
+                     corner_radius=0).pack(fill="x", pady=10)
+
+    def _ghost_btn(self, parent, text, command):
+        """Secondary button — light bg, dark text."""
+        return ctk.CTkButton(parent, text=text, command=command,
+                             width=0, height=26, corner_radius=6,
+                             fg_color=SEC_BTN, hover_color=SEC_HOVER,
+                             font=("SF Pro Text", 11), text_color=TEXT_SEC,
+                             border_width=0)
+
     # ------------------------------------------------------------------
-    # Preferences (persist between launches)
+    # Preferences
     # ------------------------------------------------------------------
 
     def _load_saved_prefs(self):
-        """Restore saved settings from previous session."""
         prefs = _load_prefs()
         if "unit" in prefs:
-            old_unit = self.unit_var.get()
             new_unit = prefs["unit"]
-            if new_unit in UNITS_TO_INCHES and new_unit != old_unit:
+            if new_unit in UNITS_TO_INCHES:
                 self.unit_var.set(new_unit)
                 self._prev_unit = new_unit
         if "width" in prefs:
@@ -316,7 +406,6 @@ class App(tk.Tk):
             self.output_path_var.set(prefs["output_path"])
 
     def _save_current_prefs(self):
-        """Save current settings for next launch."""
         _save_prefs({
             "unit": self.unit_var.get(),
             "width": self.width_var.get(),
@@ -340,7 +429,6 @@ class App(tk.Tk):
             if p not in existing:
                 self.file_list.insert("end", p)
         self._update_status()
-        # Auto-select and preview the first added image
         if paths and self.file_list.size() > 0:
             self.file_list.selection_clear(0, "end")
             self.file_list.selection_set(0)
@@ -364,13 +452,11 @@ class App(tk.Tk):
         path = self.file_list.get(sel[0])
         self._current_preview_path = path
         self._refresh_preview()
-        # Auto-fill material name from selected file stem
         stem = Path(path).stem
         if not self.material_name_var.get().strip():
             self.material_name_var.set(stem)
 
     def _on_dim_change(self, *_):
-        """Called when width or height values change — refresh preview."""
         if hasattr(self, "_current_preview_path") and self._current_preview_path:
             self._refresh_preview()
 
@@ -384,7 +470,7 @@ class App(tk.Tk):
             if w_in <= 0 or h_in <= 0:
                 return
         except (ValueError, tk.TclError):
-            w_in = h_in = 1.0  # fallback to square
+            w_in = h_in = 1.0
         self._show_preview(path, w_in, h_in)
 
     def _show_preview(self, path, w_in=1.0, h_in=1.0):
@@ -393,10 +479,7 @@ class App(tk.Tk):
             img = Image.open(path)
             orig_w, orig_h = img.size
 
-            # Scale the preview to reflect the chosen tile dimensions.
-            # The 200x200 canvas represents the tile; the image is stretched
-            # to match the width:height ratio chosen by the user.
-            canvas_size = 200
+            canvas_size = 180
             aspect = w_in / h_in
             if aspect >= 1:
                 disp_w = canvas_size
@@ -408,18 +491,16 @@ class App(tk.Tk):
             resized = img.resize((max(disp_w, 1), max(disp_h, 1)), Image.LANCZOS)
             self._preview_photo = ImageTk.PhotoImage(resized)
             self.preview_canvas.delete("all")
-            # Draw a light border around the tile area
             x0 = (canvas_size - disp_w) // 2
             y0 = (canvas_size - disp_h) // 2
             self.preview_canvas.create_rectangle(
                 x0, y0, x0 + disp_w, y0 + disp_h,
-                outline="#aaa", dash=(2, 2)
+                outline=BORDER, dash=(2, 2)
             )
             self.preview_canvas.create_image(
                 canvas_size // 2, canvas_size // 2,
                 image=self._preview_photo, anchor="center"
             )
-            # Show both pixel dims and tile size in the user's chosen unit
             unit = getattr(self, "unit_var", None)
             unit_label = unit.get() if unit else "in"
             self.preview_dims_var.set(
@@ -433,45 +514,42 @@ class App(tk.Tk):
         self._preview_photo = None
         self.preview_canvas.delete("all")
         self.preview_canvas.create_text(
-            100, 100,
+            90, 90,
             text="Select an image\nto preview",
-            fill="#999", font=("SF Pro Text", 11), justify="center"
+            fill=TEXT_DIM, font=("SF Pro Text", 10), justify="center"
         )
         self.preview_dims_var.set("")
 
     def _on_output_mode(self):
         custom = self.output_mode.get() == "custom"
-        self.output_entry.config(state="normal" if custom else "disabled")
-        self.browse_btn.config(state="normal" if custom else "disabled")
+        self.output_entry.configure(state="normal" if custom else "disabled")
+        self.browse_btn.configure(state="normal" if custom else "disabled")
 
     def _browse_output(self):
         d = filedialog.askdirectory(title="Select Output Folder")
         if d:
             self.output_path_var.set(d)
 
-    def _on_unit_change(self, _=None):
-        """Convert displayed values from old unit to new unit."""
+    def _on_unit_change(self, new_unit=None):
         old_unit = self._prev_unit
-        new_unit = self.unit_var.get()
+        if new_unit is None:
+            new_unit = self.unit_var.get()
         if old_unit == new_unit:
             return
         try:
             w = float(self.width_var.get())
             h = float(self.height_var.get())
-            # old unit → inches → new unit
             old_to_in = UNITS_TO_INCHES[old_unit]
             new_to_in = UNITS_TO_INCHES[new_unit]
-            w_new = (w * old_to_in) / new_to_in
-            h_new = (h * old_to_in) / new_to_in
-            self.width_var.set(f"{w_new:.4g}")
-            self.height_var.set(f"{h_new:.4g}")
+            self.width_var.set(f"{(w * old_to_in) / new_to_in:.4g}")
+            self.height_var.set(f"{(h * old_to_in) / new_to_in:.4g}")
         except (ValueError, KeyError):
             pass
         self._prev_unit = new_unit
 
-    def _on_preset(self, _=None):
-        """Set dimensions from preset. Presets store inches; convert to current unit."""
-        label = self.preset_var.get()
+    def _on_preset(self, label=None):
+        if label is None:
+            label = self.preset_var.get()
         for name, w, h in PRESETS:
             if name == label and w is not None:
                 to_in = UNITS_TO_INCHES.get(self.unit_var.get(), 1.0)
@@ -510,7 +588,6 @@ class App(tk.Tk):
             h_val = float(self.height_var.get())
             if w_val <= 0 or h_val <= 0:
                 raise ValueError
-            # Convert from display unit to inches (SKM always stores inches)
             to_in = UNITS_TO_INCHES.get(self.unit_var.get(), 1.0)
             w_in = w_val * to_in
             h_in = h_val * to_in
@@ -520,12 +597,10 @@ class App(tk.Tk):
 
         mat_name = self.material_name_var.get().strip() or None
 
-        self.convert_btn.config(state="disabled")
+        self.convert_btn.configure(state="disabled")
         self.reveal_btn.pack_forget()
         self._log_clear()
         self.status_var.set("Converting…")
-
-        # Save prefs on each conversion
         self._save_current_prefs()
 
         def run():
@@ -534,9 +609,6 @@ class App(tk.Tk):
             multi = len(files) > 1
             for idx, path_str in enumerate(files, start=1):
                 src = Path(path_str)
-                # Single file: use custom name as-is.
-                # Multiple files + custom name: Name-1, Name-2, …
-                # No custom name: use each image's filename.
                 if mat_name and multi:
                     file_name = f"{mat_name}-{idx}"
                 elif mat_name:
@@ -566,14 +638,12 @@ class App(tk.Tk):
         threading.Thread(target=run, daemon=True).start()
 
     def _finish(self, summary):
-        self.convert_btn.config(state="normal")
+        self.convert_btn.configure(state="normal")
         self.status_var.set(summary)
-        # Show Reveal in Finder if we have an output directory
         if self._last_output_dir and Path(self._last_output_dir).exists():
             self.reveal_btn.pack(side="right")
 
     def _reveal_in_finder(self):
-        """Open the output folder in Finder."""
         if self._last_output_dir and Path(self._last_output_dir).exists():
             subprocess.Popen(["open", str(self._last_output_dir)])
 
@@ -591,9 +661,7 @@ class App(tk.Tk):
         self.log.delete("1.0", "end")
         self.log.config(state="disabled")
 
-
     def _on_quit(self):
-        """Save preferences and ensure the process fully terminates."""
         self._save_current_prefs()
         self.destroy()
         import os
