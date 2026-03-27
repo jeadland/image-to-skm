@@ -2,9 +2,7 @@
 
 Convert JPG, PNG, BMP, GIF, TIFF, and WebP images to SketchUp's `.skm` material format. No SketchUp license required.
 
-<!-- To add a screenshot: take a screenshot of the app, save as screenshot.png in the repo root, and uncomment:
 ![SKP Converter screenshot](screenshot.png)
--->
 
 ## What is an SKM file?
 
